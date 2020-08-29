@@ -20,7 +20,7 @@ package org.jasig.ssp.transferobject.reports;
 
 import org.jasig.ssp.model.Person;
 
-public class JournalCaseNotesStudentReportTO extends BaseStudentReportTO {
+public class JournalCaseNotesStudentReportTO extends BaseStudentReportTO{
 	
 	public JournalCaseNotesStudentReportTO(){
 		super();

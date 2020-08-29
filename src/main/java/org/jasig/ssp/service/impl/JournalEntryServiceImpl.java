@@ -134,7 +134,7 @@ public class JournalEntryServiceImpl extends AbstractRestrictedPersonAssocAudita
 				 }
 			 }
 
-			 personsWithJournalEntries.sort(studentNameComparator());
+			 personsWithJournalEntries.sort(new StudentNameCompator());
 		 });
 
  		 return personsWithJournalEntries;
@@ -143,27 +143,6 @@ public class JournalEntryServiceImpl extends AbstractRestrictedPersonAssocAudita
 	private boolean personNotHaveJournalEntries(JournalStepSearchFormTO personSearchForm, Map<String, JournalCaseNotesStudentReportTO> map, BaseStudentReportTO person) {
 		return !map.containsKey(person.getSchoolId()) && StringUtils.isNotBlank(person.getCoachSchoolId()) &&
 						!(Objects.nonNull(personSearchForm.getJournalSourceIds()) && getDao().getJournalCountForPersonForJournalSourceIds(person.getId(), personSearchForm.getJournalSourceIds()) == 0);
-	}
-
-	private Comparator<? super JournalCaseNotesStudentReportTO> studentNameComparator() {
-		return (p1, p2) -> {
-
-			int value = p1.getLastName().compareToIgnoreCase(p2.getLastName());
-
-			if(value != 0) return value;
-
-			value = p1.getFirstName().compareToIgnoreCase(p2.getFirstName());
-
-			if(value != 0) return value;
-
-			if(Objects.isNull(p1.getMiddleName()) && Objects.isNull(p2.getMiddleName())) return 0;
-
-			if(Objects.isNull(p1.getMiddleName())) return -1;
-
-			if(Objects.isNull(p2.getMiddleName())) return 1;
-
-			return p1.getMiddleName().compareToIgnoreCase(p2.getMiddleName());
-		};
 	}
 
 	private static void sortByStudentName(List<JournalCaseNotesStudentReportTO> toSort) {

@@ -29,6 +29,8 @@ import javax.validation.constraints.Size;
 import org.jasig.ssp.model.reference.Campus;
 import org.jasig.ssp.model.reference.EarlyAlertReason;
 
+import java.util.Optional;
+
 /**
  * EarlyAlertRouting reference object.
  * 
@@ -120,7 +122,7 @@ public class EarlyAlertRouting extends AbstractAuditable implements
 
 	/**
 	 * Sets the campus
-	 * 
+	 *
 	 * @param campus
 	 *            the campus; required
 	 */
@@ -130,11 +132,15 @@ public class EarlyAlertRouting extends AbstractAuditable implements
 
 	/**
 	 * Gets the earlyAlertReason
-	 * 
+	 *
 	 * @return the earlyAlertReason
 	 */
 	public EarlyAlertReason getEarlyAlertReason() {
 		return earlyAlertReason;
+	}
+
+	public Optional<EarlyAlertReason> getEarlyAlertReasonOptional() {
+		return Optional.ofNullable(earlyAlertReason);
 	}
 
 	/**
@@ -155,6 +161,10 @@ public class EarlyAlertRouting extends AbstractAuditable implements
 	 */
 	public Person getPerson() {
 		return person;
+	}
+
+	public Optional getPeronOptional(){
+		return Optional.ofNullable(person);
 	}
 
 	/**
@@ -187,5 +197,9 @@ public class EarlyAlertRouting extends AbstractAuditable implements
 		result *= hashField("person", person);
 
 		return result;
+	}
+
+	public String getPersonPrimaryEmailAddress() {
+		return person.getPrimaryEmailAddress();
 	}
 }

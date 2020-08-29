@@ -35,6 +35,7 @@ import org.jasig.ssp.transferobject.CoachPersonLiteTO;
 import org.jasig.ssp.transferobject.PersonTO;
 import org.jasig.ssp.transferobject.reports.BaseStudentReportTO;
 import org.jasig.ssp.transferobject.reports.DisabilityServicesReportTO;
+import org.jasig.ssp.transferobject.reports.JournalStepSearchFormTO;
 import org.jasig.ssp.transferobject.reports.PersonSearchFormTO;
 import org.jasig.ssp.util.hibernate.BatchProcessor;
 import org.jasig.ssp.util.hibernate.NamespacedAliasToBeanResultTransformer;
@@ -44,10 +45,7 @@ import org.jasig.ssp.web.api.validation.ValidationException;
 import org.springframework.stereotype.Repository;
 import org.springframework.util.CollectionUtils;
 import javax.validation.constraints.NotNull;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
 
 /**
  * CRUD methods for the Person model.
@@ -743,4 +741,8 @@ public class PersonDao extends AbstractAuditableCrudDao<Person> implements Audit
 			
 		return coachIdUUID;
 	}
+
+  public Optional<PagingWrapper<BaseStudentReportTO>> getStudentReportTOsSortedByLastNameDesc(JournalStepSearchFormTO personSearchForm) throws ObjectNotFoundException {
+		return Optional.ofNullable(this.getStudentReportTOs(personSearchForm, SortingAndPaging.createForSingleSortAll(ObjectStatus.ACTIVE, "lastName", "DESC")));
+  }
 }

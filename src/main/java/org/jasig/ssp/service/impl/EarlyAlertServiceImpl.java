@@ -60,7 +60,6 @@ import org.jasig.ssp.service.reference.MessageTemplateService;
 import org.jasig.ssp.service.reference.ProgramStatusService;
 import org.jasig.ssp.service.reference.StudentTypeService;
 import org.jasig.ssp.transferobject.EarlyAlertSearchResultTO;
-import org.jasig.ssp.transferobject.EarlyAlertTO;
 import org.jasig.ssp.transferobject.PagedResponse;
 import org.jasig.ssp.transferobject.form.EarlyAlertSearchForm;
 import org.jasig.ssp.transferobject.messagetemplate.CoachPersonLiteMessageTemplateTO;
@@ -83,19 +82,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import javax.mail.SendFailedException;
 import javax.validation.constraints.NotNull;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 
 
 /**
@@ -110,40 +98,44 @@ public class EarlyAlertServiceImpl extends // NOPMD
 		AbstractPersonAssocAuditableService<EarlyAlert>
 		implements EarlyAlertService {
 
+	private EarlyAlertDao dao;
+	private ConfigService configService;
+	private EarlyAlertRoutingService earlyAlertRoutingService;
+	private MessageService messageService;
+	private MessageTemplateService messageTemplateService;
+	private EarlyAlertReasonService earlyAlertReasonService;
+	private EarlyAlertSuggestionService earlyAlertSuggestionService;
+	private PersonService personService;
+	private FacultyCourseService facultyCourseService;
+	private TermService termService;
+	private PersonProgramStatusService personProgramStatusService;
+	private ProgramStatusService programStatusService;
+	private StudentTypeService studentTypeService;
+	private SecurityService securityService;
+	private EarlyAlertSearchResultTOFactory searchResultFactory;
+	private EarlyAlertResponseReminderRecipientsConfig earReminderRecipientConfig;
+	private EnrollmentStatusService enrollmentStatusService;
+
 	@Autowired
-	private transient EarlyAlertDao dao;
-	@Autowired
-	private transient ConfigService configService;
-	@Autowired
-	private transient EarlyAlertRoutingService earlyAlertRoutingService;
-	@Autowired
-	private transient MessageService messageService;
-	@Autowired
-	private transient MessageTemplateService messageTemplateService;
-	@Autowired
-	private transient EarlyAlertReasonService earlyAlertReasonService;
-	@Autowired
-	private transient EarlyAlertSuggestionService earlyAlertSuggestionService;
-	@Autowired
-	private transient PersonService personService;
-	@Autowired
-	private transient FacultyCourseService facultyCourseService;
-	@Autowired
-	private transient TermService termService;
-	@Autowired
-	private transient PersonProgramStatusService personProgramStatusService;
-	@Autowired
-	private transient ProgramStatusService programStatusService;
-	@Autowired
-	private transient StudentTypeService studentTypeService;
-	@Autowired
-	private transient SecurityService securityService;
-	@Autowired
-	private transient EarlyAlertSearchResultTOFactory searchResultFactory;
-	@Autowired
-	private transient EarlyAlertResponseReminderRecipientsConfig earReminderRecipientConfig;
-	@Autowired
-	private transient EnrollmentStatusService enrollmentStatusService;
+	public EarlyAlertServiceImpl(EarlyAlertDao dao, ConfigService configService, EarlyAlertRoutingService earlyAlertRoutingService, MessageService messageService, MessageTemplateService messageTemplateService, EarlyAlertReasonService earlyAlertReasonService, EarlyAlertSuggestionService earlyAlertSuggestionService, PersonService personService, FacultyCourseService facultyCourseService, TermService termService, PersonProgramStatusService personProgramStatusService, ProgramStatusService programStatusService, StudentTypeService studentTypeService, SecurityService securityService, EarlyAlertSearchResultTOFactory searchResultFactory, EarlyAlertResponseReminderRecipientsConfig earReminderRecipientConfig, EnrollmentStatusService enrollmentStatusService) {
+		this.dao = dao;
+		this.configService = configService;
+		this.earlyAlertRoutingService = earlyAlertRoutingService;
+		this.messageService = messageService;
+		this.messageTemplateService = messageTemplateService;
+		this.earlyAlertReasonService = earlyAlertReasonService;
+		this.earlyAlertSuggestionService = earlyAlertSuggestionService;
+		this.personService = personService;
+		this.facultyCourseService = facultyCourseService;
+		this.termService = termService;
+		this.personProgramStatusService = personProgramStatusService;
+		this.programStatusService = programStatusService;
+		this.studentTypeService = studentTypeService;
+		this.securityService = securityService;
+		this.searchResultFactory = searchResultFactory;
+		this.earReminderRecipientConfig = earReminderRecipientConfig;
+		this.enrollmentStatusService = enrollmentStatusService;
+	}
 
 	private static final Logger LOGGER = LoggerFactory
 			.getLogger(EarlyAlertServiceImpl.class);
@@ -158,27 +150,15 @@ public class EarlyAlertServiceImpl extends // NOPMD
 	public EarlyAlert create(@NotNull final EarlyAlert earlyAlert)
 			throws ObjectNotFoundException, ValidationException {
 		// Validate objects
-		if (earlyAlert == null) {
-			throw new IllegalArgumentException("EarlyAlert must be provided.");
-		}
 
-		if (earlyAlert.getPerson() == null) {
-			throw new ValidationException(
-					"EarlyAlert Student data must be provided.");
-		}
+		earlyAlert.getPersonOptional().orElseThrow(() -> new ValidationException("EarlyAlert Student data must be provided."));
 
 		final Person student = earlyAlert.getPerson();
 
 		// Figure student advisor or early alert coordinator
-		final UUID assignedAdvisor = getEarlyAlertAdvisor(earlyAlert);
-		if (assignedAdvisor == null) {
-			throw new ValidationException(
-					"Could not determine the Early Alert Advisor for student ID "
-							+ student.getId());
-		}
+		final UUID assignedAdvisor = getEarlyAlertAdvisor(earlyAlert).orElseThrow(() -> new ValidationException("Could not determine the Early Alert Advisor for student ID " + student.getId()));
 
-		if (student.getCoach() == null
-				|| assignedAdvisor.equals(student.getCoach().getId())) {
+		if (Objects.isNull(student.getCoach()) || assignedAdvisor.equals(student.getCoach().getId())) {
 			student.setCoach(personService.get(assignedAdvisor));
 		}
 
@@ -190,25 +170,17 @@ public class EarlyAlertServiceImpl extends // NOPMD
 		// Send e-mail to assigned advisor (coach)
 		try {
 			sendMessageToAdvisor(saved, earlyAlert.getEmailCC());
-		} catch (final SendFailedException e) {
-			LOGGER.warn(
-					"Could not send Early Alert message to advisor.",
-					e);
-			throw new ValidationException(
-					"Early Alert notification e-mail could not be sent to advisor. Early Alert was NOT created.",
-					e);
+		} catch (final Exception e) {
+			LOGGER.warn("Could not send Early Alert message to advisor.", e);
+			throw new ValidationException("Early Alert notification e-mail could not be sent to advisor. Early Alert was NOT created.", e);
 		}
 
 		// Send e-mail CONFIRMATION to faculty
 		try {
 			sendConfirmationMessageToFaculty(saved);
-		} catch (final SendFailedException e) {
-			LOGGER.warn(
-					"Could not send Early Alert confirmation to faculty.",
-					e);
-			throw new ValidationException(
-					"Early Alert confirmation e-mail could not be sent. Early Alert was NOT created.",
-					e);
+		} catch (final Exception e) {
+			LOGGER.warn("Could not send Early Alert confirmation to faculty.", e);
+			throw new ValidationException("Early Alert confirmation e-mail could not be sent. Early Alert was NOT created.", e);
 		}
 
 		return saved;
@@ -304,17 +276,15 @@ public class EarlyAlertServiceImpl extends // NOPMD
 			current.setPerson(personService.get(obj.getPerson().getId()));
 		}
 
-		final Set<EarlyAlertReason> earlyAlertReasons = new HashSet<EarlyAlertReason>();
-		if (obj.getEarlyAlertReasons() != null) {
-			for (final EarlyAlertReason reason : obj.getEarlyAlertReasons()) {
-				earlyAlertReasons.add(earlyAlertReasonService.load(reason
-						.getId()));
-			}
+		final Set<EarlyAlertReason> earlyAlertReasons = new HashSet<>();
+		for (final EarlyAlertReason reason : obj.getEarlyAlertReasons()) {
+			earlyAlertReasons.add(earlyAlertReasonService.load(reason
+					.getId()));
 		}
 
 		current.setEarlyAlertReasons(earlyAlertReasons);
 
-		final Set<EarlyAlertSuggestion> earlyAlertSuggestions = new HashSet<EarlyAlertSuggestion>();
+		final Set<EarlyAlertSuggestion> earlyAlertSuggestions = new HashSet<>();
 		if (obj.getEarlyAlertSuggestions() != null) {
 			for (final EarlyAlertSuggestion reason : obj
 					.getEarlyAlertSuggestions()) {
@@ -346,30 +316,20 @@ public class EarlyAlertServiceImpl extends // NOPMD
 	 *             determine the advisor for this student.
 	 * @return The assigned advisor
 	 */
-	private UUID getEarlyAlertAdvisor(final EarlyAlert earlyAlert)
-			throws ValidationException {
-		// Check for student already assigned to an advisor (a.k.a. coach)
-		if ((earlyAlert.getPerson().getCoach() != null) &&
-				(earlyAlert.getPerson().getCoach().getId() != null)) {
-			return earlyAlert.getPerson().getCoach().getId();
-		}
+	private Optional<UUID> getEarlyAlertAdvisor(final EarlyAlert earlyAlert) {
+
+		if(earlyAlert.getPersonCoachId().isPresent())
+			return earlyAlert.getPersonCoachId();
 
 		// Get campus Early Alert coordinator
 		if (earlyAlert.getCampus() == null) {
 			throw new IllegalArgumentException("Campus ID can not be null.");
 		}
 
-		if (earlyAlert.getCampus().getEarlyAlertCoordinatorId() != null) {
-			// Return Early Alert coordinator UUID
-			return earlyAlert.getCampus().getEarlyAlertCoordinatorId();
-		}
+		if(earlyAlert.getCampusEarlyAlertCoordinatorId().isPresent())
+			return earlyAlert.getCampusEarlyAlertCoordinatorId();
 
-		// TODO If no campus EA Coordinator, assign to default EA Coordinator
-		// (which is not yet implemented)
-
-		// getEarlyAlertAdvisor should never return null
-		throw new ValidationException(
-				"Could not determined the Early Alert Coordinator for this student. Ensure that a default coordinator is set globally and for all campuses.");
+		return Optional.empty();
 	}
 
 	private void ensureValidAlertedOnPersonStateNoFail(Person person) {
@@ -386,9 +346,7 @@ public class EarlyAlertServiceImpl extends // NOPMD
 	private void ensureValidAlertedOnPersonStateOrFail(Person person)
 			throws ObjectNotFoundException, ValidationException {
 
-		if ( person.getObjectStatus() != ObjectStatus.ACTIVE ) {
-			person.setObjectStatus(ObjectStatus.ACTIVE);
-		}
+		person.setObjectStatus(ObjectStatus.ACTIVE);
 
 		final ProgramStatus programStatus =  programStatusService.getActiveStatus();
 		if ( programStatus == null ) {
@@ -397,8 +355,7 @@ public class EarlyAlertServiceImpl extends // NOPMD
 					"ProgramStatus");
 		}
 
-		Set<PersonProgramStatus> programStatuses =
-				person.getProgramStatuses();
+		Set<PersonProgramStatus> programStatuses = person.getProgramStatuses();
 		if ( programStatuses == null || programStatuses.isEmpty() ) {
 			PersonProgramStatus personProgramStatus = new PersonProgramStatus();
 			personProgramStatus.setEffectiveDate(new Date());
@@ -429,109 +386,91 @@ public class EarlyAlertServiceImpl extends // NOPMD
 	 * @param emailCC
 	 *            Email address to also CC this message
 	 * @throws ObjectNotFoundException
-	 * @throws SendFailedException
 	 * @throws ValidationException
 	 */
-	private void sendMessageToAdvisor(@NotNull final EarlyAlert earlyAlert, // NOPMD
-			final String emailCC) throws ObjectNotFoundException,
-			SendFailedException, ValidationException {
-		if (earlyAlert == null) {
-			throw new IllegalArgumentException("Early alert was missing.");
-		}
+	private void sendMessageToAdvisor(@NotNull final EarlyAlert earlyAlert,
+																		final String emailCC) throws ObjectNotFoundException, ValidationException {
 
-		if (earlyAlert.getPerson() == null) {
-			throw new IllegalArgumentException("EarlyAlert Person is missing.");
-		}
+		earlyAlert.getPersonOptional().orElseThrow(() -> new IllegalArgumentException("EarlyAlert Person is missing."));
 
-		final Person person = earlyAlert.getPerson().getCoach();
-		final SubjectAndBody subjAndBody = messageTemplateService
-				.createEarlyAlertAdvisorConfirmationMessage(fillTemplateParameters(earlyAlert));
-		
-		Set<String> watcherEmailAddresses = new HashSet<String>(earlyAlert.getPerson().getWatcherEmailAddresses());
-		if(emailCC != null && !emailCC.isEmpty())
-		{
-			watcherEmailAddresses.add(emailCC);
-		}
-		if ( person == null ) {
-			LOGGER.warn("Student {} had no coach when EarlyAlert {} was"
-					+ " created. Unable to send message to coach.",
-					earlyAlert.getPerson(), earlyAlert);
-		} else {
-			// Create and queue the message
-			final Message message = messageService.createMessage(person, org.springframework.util.StringUtils.arrayToCommaDelimitedString(watcherEmailAddresses
-					.toArray(new String[watcherEmailAddresses.size()])),
-					subjAndBody);
-			LOGGER.info("Message {} created for EarlyAlert {}", message, earlyAlert);
-		}
+		final SubjectAndBody subjAndBody = messageTemplateService.createEarlyAlertAdvisorConfirmationMessage(fillTemplateParameters(earlyAlert));
+
+		this.notifyPersonWatcher(earlyAlert, emailCC, subjAndBody);
 
 		// Send same message to all applicable Campus Early Alert routing
 		// entries
-		final PagingWrapper<EarlyAlertRouting> routes = earlyAlertRoutingService
-				.getAllForCampus(earlyAlert.getCampus(), new SortingAndPaging(
-						ObjectStatus.ACTIVE));
+		final PagingWrapper<EarlyAlertRouting> routes = earlyAlertRoutingService.getAllForCampus(earlyAlert.getCampus(), new SortingAndPaging(ObjectStatus.ACTIVE));
 
-        if (routes.getResults() > 0) {
-			final ArrayList<String> alreadySent = Lists.newArrayList();
+		if (routes.getResults() > 0) {
+			final Set<String> alreadySent = new HashSet<>();
 		
  			for (final EarlyAlertRouting route : routes.getRows()) {
-                // Check that route applies
-                if ( route.getEarlyAlertReason() == null ) {
-                    throw new ObjectNotFoundException(
-                            "EarlyAlertRouting missing EarlyAlertReason.", "EarlyAlertReason");
-                }
+				// Check that route applies
+				route.getEarlyAlertReasonOptional().orElseThrow(() -> new ObjectNotFoundException("EarlyAlertRouting missing EarlyAlertReason.", "EarlyAlertReason"));
 
-                // Only routes that are for any of the Reasons in this EarlyAlert should be applied.
-                if ( (earlyAlert.getEarlyAlertReasons() == null)
-                        || !earlyAlert.getEarlyAlertReasons().contains(route.getEarlyAlertReason()) ) {
-                    continue;
-                }
+				// Only routes that are for any of the Reasons in this EarlyAlert should be applied.
+				if (earlyAlert.getEarlyAlertReasons().contains(route.getEarlyAlertReason()) &&
+								!alreadySent.contains(route.getPersonPrimaryEmailAddress())) {
 
-                // Send e-mail to specific person
-                final Person to = route.getPerson();
-                if ( to != null && StringUtils.isNotBlank(to.getPrimaryEmailAddress()) ) {
-                    //check if this alert has already been sent to this recipient, if so skip
-                    if ( alreadySent.contains(route.getPerson().getPrimaryEmailAddress()) ) {
-                        continue;
-                    } else {
-                        alreadySent.add(route.getPerson().getPrimaryEmailAddress());
-                    }
+					sendToCoach(earlyAlert, subjAndBody, alreadySent, route);
 
-                    final Message message = messageService.createMessage(to, null, subjAndBody);
-                    LOGGER.info("Message {} for EarlyAlert {} also routed to {}",
-                                new Object[]{message, earlyAlert, to}); // NOPMD
-                }
+					sendToGroup(earlyAlert, subjAndBody, route);
 
-				// Send e-mail to a group
-				if ( !StringUtils.isEmpty(route.getGroupName()) && !StringUtils.isEmpty(route.getGroupEmail()) ) {
-                    final Message message = messageService.createMessage(route.getGroupEmail(), null,subjAndBody);
-					LOGGER.info("Message {} for EarlyAlert {} also routed to {}", new Object[] { message, earlyAlert, // NOPMD
-									route.getGroupEmail() });
 				}
 			}
 		}
 	}
 
-	@Override
-	public void sendMessageToStudent(@NotNull final EarlyAlert earlyAlert)
-			throws ObjectNotFoundException, SendFailedException,
-			ValidationException {
-		if (earlyAlert == null) {
-			throw new IllegalArgumentException("EarlyAlert was missing.");
+	private void sendToCoach(@NotNull EarlyAlert earlyAlert, SubjectAndBody subjAndBody, Set<String> alreadySent, EarlyAlertRouting route) throws ObjectNotFoundException, ValidationException {
+		final Person to = route.getPerson();
+		if ( Objects.nonNull(to) && StringUtils.isNotBlank(to.getPrimaryEmailAddress()) ) {
+			//check if this alert has already been sent to this recipient, if so skip
+			final Message message = messageService.createMessage(to, null, subjAndBody);
+			LOGGER.info("Message {} for EarlyAlert {} also routed to {}",
+							new Object[]{message, earlyAlert, to}); // NOPMD
+			alreadySent.add(route.getPersonPrimaryEmailAddress());
+		}
+	}
+
+	private void sendToGroup(@NotNull EarlyAlert earlyAlert, SubjectAndBody subjAndBody, EarlyAlertRouting route) throws ObjectNotFoundException, ValidationException {
+		// Send e-mail to a group
+		if ( !StringUtils.isEmpty(route.getGroupName()) && !StringUtils.isEmpty(route.getGroupEmail()) ) {
+			final Message message = messageService.createMessage(route.getGroupEmail(), null,subjAndBody);
+			LOGGER.info("Message {} for EarlyAlert {} also routed to {}", new Object[] { message, earlyAlert, // NOPMD
+							route.getGroupEmail() });
+		}
+	}
+
+	private void notifyPersonWatcher(@NotNull EarlyAlert earlyAlert, String emailCC, SubjectAndBody subjAndBody) throws ObjectNotFoundException, ValidationException {
+		final Person coach = earlyAlert.getCoach();
+		Set<String> watcherEmailAddresses = earlyAlert.getPersonWatcherEmailAddresses();
+
+		if(emailCC != null && !emailCC.isEmpty()) {
+			watcherEmailAddresses.add(emailCC);
 		}
 
-		if (earlyAlert.getPerson() == null) {
-			throw new IllegalArgumentException("EarlyAlert.Person is missing.");
+		if (Objects.isNull(coach)) {
+			LOGGER.warn("Student {} had no coach when EarlyAlert {} was"
+					+ " created. Unable to send message to coach.",
+					earlyAlert.getPerson(), earlyAlert);
+		} else {
+			// Create and queue the message
+			final Message message = messageService.createMessage(coach, String.join(";", watcherEmailAddresses), subjAndBody);
+			LOGGER.info("Message {} created for EarlyAlert {}", message, earlyAlert);
 		}
+	}
+
+	@Override
+	public void sendMessageToStudent(@NotNull final EarlyAlert earlyAlert) throws ObjectNotFoundException, ValidationException {
+
+		earlyAlert.getPersonOptional().orElseThrow(() -> new IllegalArgumentException("EarlyAlert.Person is missing."));
 
 		final Person person = earlyAlert.getPerson();
 		final SubjectAndBody subjAndBody = messageTemplateService
 				.createEarlyAlertToStudentMessage(fillTemplateParameters(earlyAlert));
 
-		Set<String> watcheremails = new HashSet<String>(person.getWatcherEmailAddresses());
 		// Create and queue the message
-		final Message message = messageService.createMessage(person, org.springframework.util.StringUtils.arrayToCommaDelimitedString(watcheremails
-				.toArray(new String[watcheremails.size()])),
-				subjAndBody);
+		final Message message = messageService.createMessage(person, String.join(";", person.getWatcherEmailAddresses()), subjAndBody);
 
 		LOGGER.info("Message {} created for EarlyAlert {}", message, earlyAlert);
 	}
@@ -543,12 +482,9 @@ public class EarlyAlertServiceImpl extends // NOPMD
 	 * @param earlyAlert
 	 *            Early Alert
 	 * @throws ObjectNotFoundException
-	 * @throws SendFailedException
 	 * @throws ValidationException
 	 */
-	private void sendConfirmationMessageToFaculty(final EarlyAlert earlyAlert)
-			throws ObjectNotFoundException, SendFailedException,
-			ValidationException {
+	private void sendConfirmationMessageToFaculty(final EarlyAlert earlyAlert) throws ObjectNotFoundException, ValidationException {
 		if (earlyAlert == null) {
 			throw new IllegalArgumentException("EarlyAlert was missing.");
 		}
@@ -557,7 +493,7 @@ public class EarlyAlertServiceImpl extends // NOPMD
 			throw new IllegalArgumentException("EarlyAlert.Person is missing.");
 		}
 
-        if (configService.getByNameOrDefaultValue("send_faculty_mail") != true) {
+        if (!configService.getByNameOrDefaultValue("send_faculty_mail")) {
             LOGGER.debug("Skipping Faculty Early Alert Confirmation Email: Config Turned Off");
             return; //skip if faculty early alert email turned off
         }
@@ -580,38 +516,14 @@ public class EarlyAlertServiceImpl extends // NOPMD
 	}
 
 	@Override
-	public Map<String, Object> fillTemplateParameters(
-			@NotNull final EarlyAlert earlyAlert) {
-		if (earlyAlert == null) {
-			throw new IllegalArgumentException("EarlyAlert was missing.");
-		}
+	public Map<String, Object> fillTemplateParameters(final EarlyAlert earlyAlert) {
 
-		if (earlyAlert.getPerson() == null) {
-			throw new IllegalArgumentException("EarlyAlert.Person is missing.");
-		}
-
-		if (earlyAlert.getCreatedBy() == null) {
-			throw new IllegalArgumentException(
-					"EarlyAlert.CreatedBy is missing.");
-		}
-
-		if (earlyAlert.getCampus() == null) {
-			throw new IllegalArgumentException("EarlyAlert.Campus is missing.");
-		}
-
-		// ensure earlyAlert.createdBy is populated
-		if ((earlyAlert.getCreatedBy() == null)
-				|| (earlyAlert.getCreatedBy().getFirstName() == null)) {
-			if (earlyAlert.getCreatedBy() == null) {
-				throw new IllegalArgumentException(
-						"EarlyAlert.CreatedBy is missing.");
-			}
-		}
+		doFillTemplateParametersValidations(earlyAlert);
 
 		final Map<String, Object> templateParameters = Maps.newHashMap();
 
 		final String courseName = earlyAlert.getCourseName();
-		if ( StringUtils.isNotBlank(courseName) ) {
+		if (StringUtils.isNotBlank(courseName) ) {
 			Person creator;
 			try {
 				creator = personService.get(earlyAlert.getCreatedBy().getId());
@@ -620,54 +532,52 @@ public class EarlyAlertServiceImpl extends // NOPMD
 						"EarlyAlert.CreatedBy.Id could not be loaded.", e1);
 			}
 			final String facultySchoolId = creator.getSchoolId();
-			if ( (StringUtils.isNotBlank(facultySchoolId)) ) {
-				String termCode = earlyAlert.getCourseTermCode();
-				FacultyCourse course = null;
+			if (StringUtils.isNotBlank(facultySchoolId)) {
+				final String termCode = earlyAlert.getCourseTermCode();
+				Optional<FacultyCourse> courseOptional = Optional.empty();
 				try {
 					if ( StringUtils.isBlank(termCode) ) {
-						course = facultyCourseService.
-								getCourseByFacultySchoolIdAndFormattedCourse(
-										facultySchoolId, courseName);
+						courseOptional = Optional.ofNullable(facultyCourseService.getCourseByFacultySchoolIdAndFormattedCourse(facultySchoolId, courseName));
 					} else {
-						course = facultyCourseService.
-								getCourseByFacultySchoolIdAndFormattedCourseAndTermCode(
-										facultySchoolId, courseName, termCode);
+						courseOptional = Optional.ofNullable(facultyCourseService.getCourseByFacultySchoolIdAndFormattedCourseAndTermCode(facultySchoolId, courseName, termCode));
 					}
 				} catch ( ObjectNotFoundException e ) {
 					// Trace irrelevant. see below for logging. prefer to
 					// do it there, after the null check b/c not all service
 					// methods implement ObjectNotFoundException reliably.
 				}
-				if ( course != null ) {
+				courseOptional.ifPresentOrElse(course -> {
 					templateParameters.put("course", course);
+					String code = termCode;
+
 					if ( StringUtils.isBlank(termCode) ) {
-						termCode = course.getTermCode();
+						code = course.getTermCode();
 					}
-					if ( StringUtils.isNotBlank(termCode) ) {
+
+					if (StringUtils.isNotBlank(code)) {
 						Term term = null;
 						try {
-							term = termService.getByCode(termCode);
+							term = termService.getByCode(code);
 						} catch ( ObjectNotFoundException e ) {
 							// Trace irrelevant. See below for logging.
 						}
-						if ( term != null ) {
+						if ( Objects.nonNull(term)) {
 							templateParameters.put("term", term);
 						} else {
 							LOGGER.info("Not adding term to message template"
-									+ " params or early alert {} because"
-									+ " the term code {} did not resolve to"
-									+ " an external term record",
-									earlyAlert.getId(), termCode);
+															+ " params or early alert {} because"
+															+ " the term code {} did not resolve to"
+															+ " an external term record",
+											earlyAlert.getId(), code);
 						}
 					}
-				} else {
-					LOGGER.info("Not adding course nor term to message template"
-							+ " params for early alert {} because the associated"
-							+ " course {} and faculty school id {} did not"
-							+ " resolve to an external course record.",
-							new Object[] { earlyAlert.getId(), courseName,
-									facultySchoolId});
-				}
+				}, ()-> LOGGER.info("Not adding course nor term to message template"
+													+ " params for early alert {} because the associated"
+													+ " course {} and faculty school id {} did not"
+													+ " resolve to an external course record.",
+									new Object[] { earlyAlert.getId(), courseName,
+													facultySchoolId})
+				);
 			}
 		}
 		Person creator = null;
@@ -700,15 +610,15 @@ public class EarlyAlertServiceImpl extends // NOPMD
 		}
 		
 		
-		
+		final String TERM_MESSAGE = "term_to_represent_early_alert";
 		
 		templateParameters.put("earlyAlert", eaMTO);
 		templateParameters.put("termToRepresentEarlyAlert",
-				configService.getByNameEmpty("term_to_represent_early_alert"));
+				configService.getByNameEmpty(TERM_MESSAGE));
 		templateParameters.put("TermToRepresentEarlyAlert",
-				configService.getByNameEmpty("term_to_represent_early_alert"));
+				configService.getByNameEmpty(TERM_MESSAGE));
 		templateParameters.put("termForEarlyAlert",
-				configService.getByNameEmpty("term_to_represent_early_alert"));
+				configService.getByNameEmpty(TERM_MESSAGE));
 		templateParameters.put("linkToSSP",
 				configService.getByNameEmpty("serverExternalPath"));
 		templateParameters.put("applicationTitle",
@@ -723,12 +633,30 @@ public class EarlyAlertServiceImpl extends // NOPMD
 		return templateParameters;
 	}
 
-	@Override
-	public void applyEarlyAlertCounts(Person person) {
-		if ( person == null ) {
-			return; // can occur in some legit person lookup call paths
+	private void doFillTemplateParametersValidations(EarlyAlert earlyAlert) {
+
+		if (Objects.isNull(earlyAlert)) {
+			throw new IllegalArgumentException("EarlyAlert was missing.");
+		}
+
+		earlyAlert.getPersonOptional().orElseThrow(() -> new IllegalArgumentException("EarlyAlert.Person is missing."));
+
+		if (earlyAlert.getCreatedBy() == null) {
+			throw new IllegalArgumentException("EarlyAlert.CreatedBy is missing.");
+		}
+
+		if (Objects.isNull(earlyAlert.getCampus())) {
+			throw new IllegalArgumentException("EarlyAlert.Campus is missing.");
+		}
+
+		// ensure earlyAlert.createdBy is populated
+		if (Objects.isNull(earlyAlert.getCreatorFirstName())){
+				throw new IllegalArgumentException("EarlyAlert.CreatedBy is missing.");
 		}
 	}
+
+	@Override
+	public void applyEarlyAlertCounts(Person person) {}
 
 	@Override
 	public Map<UUID, Number> getCountOfActiveAlertsForPeopleIds(
@@ -836,8 +764,8 @@ public class EarlyAlertServiceImpl extends // NOPMD
 		}
 		List<EarlyAlert> eaOutOfCompliance = dao.getResponseDueEarlyAlerts(lastResponseDate);
 		
-		Map<UUID, List<EarlyAlertMessageTemplateTO>> easByCoach = new HashMap<UUID, List<EarlyAlertMessageTemplateTO>>();
-		Map<UUID, Person> coaches = new HashMap<UUID, Person>();
+		Map<UUID, List<EarlyAlertMessageTemplateTO>> easByCoach = new HashMap<>();
+		Map<UUID, Person> coaches = new HashMap<>();
 		final boolean includeCoachAsRecipient = this.earReminderRecipientConfig.includeCoachAsRecipient();
 		final boolean includeEarlyAlertCoordinatorAsRecipient = this.earReminderRecipientConfig.includeEarlyAlertCoordinatorAsRecipient();
 		final boolean includeEarlyAlertCoordinatorAsRecipientOnlyIfStudentHasNoCoach = this.earReminderRecipientConfig.includeEarlyAlertCoordinatorAsRecipientOnlyIfStudentHasNoCoach();
@@ -845,7 +773,7 @@ public class EarlyAlertServiceImpl extends // NOPMD
 		LOGGER.info("Config: includeEarlyAlertCoordinatorAsRecipient(): {}", includeEarlyAlertCoordinatorAsRecipient);
 		LOGGER.info("Config: includeEarlyAlertCoordinatorAsRecipientOnlyIfStudentHasNoCoach(): {}", includeEarlyAlertCoordinatorAsRecipientOnlyIfStudentHasNoCoach);
 		for (EarlyAlert earlyAlert: eaOutOfCompliance){
-			final Set<Person> recipients = new HashSet<Person>();
+			final Set<Person> recipients = new HashSet<>();
 			Person coach = earlyAlert.getPerson().getCoach();
 			if (includeCoachAsRecipient) {
 				if (coach == null) {
@@ -907,24 +835,20 @@ public class EarlyAlertServiceImpl extends // NOPMD
 			}
 		}
 		for(UUID coachId: easByCoach.keySet()){
-			Map<String,Object> messageParams = new HashMap<String,Object>();
+			Map<String,Object> messageParams = new HashMap<>();
 
-			Collections.sort(easByCoach.get(coachId), new Comparator<EarlyAlertTO>() {
-				@Override
-				public int compare(EarlyAlertTO p1, EarlyAlertTO p2) {
-					Date p1Date = p1.getLastResponseDate();
-					if (p1Date == null)
-						p1Date = p1.getCreatedDate();
-					Date p2Date = p2.getLastResponseDate();
-					if (p2Date == null)
-						p2Date = p2.getCreatedDate();
-					return p1Date.compareTo(p2Date);
-				}
-
+			easByCoach.get(coachId).sort((p1, p2) -> {
+				Date p1Date = p1.getLastResponseDate();
+				if (p1Date == null)
+					p1Date = p1.getCreatedDate();
+				Date p2Date = p2.getLastResponseDate();
+				if (p2Date == null)
+					p2Date = p2.getCreatedDate();
+				return p1Date.compareTo(p2Date);
 			});
 
 			Integer daysSince1900ResponseExpected =  DateTimeUtils.daysSince1900(lastResponseDate);
-			List<Pair<EarlyAlertMessageTemplateTO,Integer>> earlyAlertTOPairs = new ArrayList<Pair<EarlyAlertMessageTemplateTO,Integer>>();
+			List<Pair<EarlyAlertMessageTemplateTO,Integer>> earlyAlertTOPairs = new ArrayList<>();
 			for(EarlyAlertMessageTemplateTO ea:easByCoach.get(coachId)){
 				Integer daysOutOfCompliance;
 				if(ea.getLastResponseDate() != null){
@@ -935,7 +859,7 @@ public class EarlyAlertServiceImpl extends // NOPMD
 				
 				// Just in case attempt to only send emails for EA full day out of compliance
 				if(daysOutOfCompliance >= 0)
-					earlyAlertTOPairs.add(new Pair<EarlyAlertMessageTemplateTO,Integer>(ea, daysOutOfCompliance));
+					earlyAlertTOPairs.add(new Pair<>(ea, daysOutOfCompliance));
 			}
 			messageParams.put("earlyAlertTOPairs", earlyAlertTOPairs);
 			messageParams.put("coach", coaches.get(coachId));
@@ -967,7 +891,7 @@ public class EarlyAlertServiceImpl extends // NOPMD
 	public Map<UUID,Number> getResponsesDueCountEarlyAlerts(List<UUID> personIds){
 		Date lastResponseDate = getMinimumResponseComplianceDate();
 		if(lastResponseDate == null)
-			return new HashMap<UUID,Number>();
+			return new HashMap<>();
 		return dao.getResponsesDueCountEarlyAlerts(personIds, lastResponseDate);
 	}
 	
@@ -986,7 +910,7 @@ public class EarlyAlertServiceImpl extends // NOPMD
 	public PagedResponse<EarlyAlertSearchResultTO> searchEarlyAlert(
 			EarlyAlertSearchForm form) {
 		PagingWrapper<EarlyAlertSearchResult> models = dao.searchEarlyAlert(form);
-		return new PagedResponse<EarlyAlertSearchResultTO>(true,
+		return new PagedResponse<>(true,
 				models.getResults(), searchResultFactory.asTOList(models.getRows()));	
 	}
 }

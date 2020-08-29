@@ -18,10 +18,7 @@
  */
 package org.jasig.ssp.model;
 
-import java.util.Date;
-import java.util.List;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 
 import javax.persistence.Column;
 import javax.persistence.Entity;
@@ -306,6 +303,9 @@ public class EarlyAlert // NOPMD by jon.adams on 5/24/12 1:29 PM
 	 * @return the earlyAlertReasonIds
 	 */
 	public Set<EarlyAlertReason> getEarlyAlertReasons() {
+		if(Objects.isNull(earlyAlertReasonIds))
+			this.earlyAlertReasonIds = new HashSet<>();
+
 		return earlyAlertReasonIds;
 	}
 
@@ -397,5 +397,29 @@ public class EarlyAlert // NOPMD by jon.adams on 5/24/12 1:29 PM
 
 	public void setEnrollmentStatus(String enrollmentStatus) {
 		this.enrollmentStatus = enrollmentStatus;
+	}
+
+  public Person getCoach() {
+		return this.person.getCoach();
+  }
+
+	public Set<String> getPersonWatcherEmailAddresses() {
+		return new HashSet<>(this.person.getWatcherEmailAddresses());
+	}
+
+	public Optional<Person> getPersonOptional() {
+		return Optional.ofNullable(person);
+	}
+
+	public Optional<UUID> getPersonCoachId() {
+		return this.person.getCoachId();
+	}
+
+	public Optional<UUID> getCampusEarlyAlertCoordinatorId() {
+		return Optional.ofNullable(this.campus.getEarlyAlertCoordinatorId());
+	}
+
+	public String getCreatorFirstName() {
+		return this.getCreatedBy().getFirstName();
 	}
 }

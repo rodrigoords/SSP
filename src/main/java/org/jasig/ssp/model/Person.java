@@ -18,12 +18,7 @@
  */
 package org.jasig.ssp.model; // NOPMD
 
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.Date;
-import java.util.List;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 import javax.annotation.Nullable;
 import javax.persistence.Column;
 import javax.persistence.DiscriminatorColumn;
@@ -84,7 +79,15 @@ public class Person extends AbstractAuditable implements Auditable { // NOPMD
 	private static final String INACTIVE_EARLY_ALERT_FORMULA = " ( select count(*) from early_alert ea " +
 			" where ea.person_id = ID and ea.closed_date is not null ) ";
 
-	/**
+	public Optional<UUID> getCoachId() {
+
+		if(Objects.isNull(this.coach))
+			return Optional.empty();
+
+		return Optional.ofNullable(this.coach.getId());
+	}
+
+  /**
 	 * Compares names only. I.e. two {@link Person}s with the same first, last,
 	 * and middle names are considered equivalent, even if they represent
 	 * different people. This is often problematic when using this

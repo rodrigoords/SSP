@@ -46,14 +46,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
 import org.springframework.util.CollectionUtils;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 
 @Repository
 public class JournalEntryDao
@@ -286,6 +279,7 @@ public class JournalEntryDao
 		}
 		return  new PagingWrapper<JournalStepStudentReportTO>(criteria.list().size(), (List<JournalStepStudentReportTO>)criteria.list());
 	}
+
 	
 	@SuppressWarnings("unchecked")
 	public List<JournalCaseNotesStudentReportTO> getJournalCaseNoteStudentReportTOsFromCriteria(
